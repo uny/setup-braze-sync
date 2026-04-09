@@ -42,11 +42,12 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
+        INPUT_VERSION: ${{ inputs.version }}
       run: |
-        if [ "${{ inputs.version }}" = "latest" ]; then
-          version=$(gh release view --repo uny/braze-sync --json tagName --jq '.tagName' | sed 's/^v//')
+        if [ "$INPUT_VERSION" = "latest" ]; then
+          version=$(gh release view --repo uny/braze-sync --json tagName --jq '.tagName | ltrimstr("v")')
         else
-          version="${{ inputs.version }}"
+          version="$INPUT_VERSION"
         fi
         echo "version=$version" >> "$GITHUB_OUTPUT"
 
