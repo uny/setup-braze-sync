@@ -1,0 +1,81 @@
+name: "Setup braze-sync"
+description: "Install braze-sync CLI for managing Braze configuration as code"
+branding:
+  icon: "upload-cloud"
+  color: "blue"
+
+inputs:
+  version:
+    description: "Version to install (e.g. '0.1.0'). Defaults to latest."
+    required: false
+    default: "latest"
+  token:
+    description: "GitHub token for downloading release assets. Defaults to GITHUB_TOKEN."
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  version:
+    description: "The version of braze-sync that was installed"
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Determine platform
+      id: platform
+      shell: bash
+      run: |
+        case "$RUNNER_OS-$RUNNER_ARCH" in
+          Linux-X64)   target="x86_64-unknown-linux-gnu" ; ext="tar.gz" ;;
+          Linux-ARM64)  target="aarch64-unknown-linux-gnu" ; ext="tar.gz" ;;
+          macOS-X64)   target="x86_64-apple-darwin" ; ext="tar.gz" ;;
+          macOS-ARM64)  target="aarch64-apple-darwin" ; ext="tar.gz" ;;
+          Windows-X64) target="x86_64-pc-windows-msvc" ; ext="zip" ;;
+          *) echo "::error::Unsupported platform: $RUNNER_OS-$RUNNER_ARCH" && exit 1 ;;
+        esac
+        echo "target=$target" >> "$GITHUB_OUTPUT"
+        echo "ext=$ext" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve version
+      id: resolve
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        if [ "${{ inputs.version }}" = "latest" ]; then
+          version=$(gh release view --repo uny/braze-sync --json tagName --jq '.tagName' | sed 's/^v//')
+        else
+          version="${{ inputs.version }}"
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    - name: Install braze-sync
+      id: install
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        version="${{ steps.resolve.outputs.version }}"
+        target="${{ steps.platform.outputs.target }}"
+        ext="${{ steps.platform.outputs.ext }}"
+        archive="braze-sync-${target}.${ext}"
+
+        install_dir="${RUNNER_TEMP}/braze-sync"
+        mkdir -p "$install_dir"
+
+        gh release download "v${version}" \
+          --repo uny/braze-sync \
+          --pattern "$archive" \
+          --dir "$install_dir"
+
+        if [ "$ext" = "tar.gz" ]; then
+          tar xzf "${install_dir}/${archive}" -C "$install_dir"
+        else
+          unzip -o "${install_dir}/${archive}" -d "$install_dir"
+        fi
+
+        rm -f "${install_dir}/${archive}"
+        echo "${install_dir}" >> "$GITHUB_PATH"
+        echo "version=${version}" >> "$GITHUB_OUTPUT"
+        echo "::notice::Installed braze-sync v${version} for ${target}"
