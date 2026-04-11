@@ -1,0 +1,59 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-latest:
+    name: Install latest on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-13
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        id: setup
+      - name: Verify installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          braze-sync --version
+          if [ -z "${{ steps.setup.outputs.version }}" ]; then
+            echo "::error::version output was empty"
+            exit 1
+          fi
+
+  test-pinned:
+    name: Install pinned version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        id: setup
+        with:
+          version: "0.1.0"
+      - name: Verify pinned version
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(braze-sync --version | awk '{print $2}')
+          if [ "$actual" != "0.1.0" ]; then
+            echo "::error::expected braze-sync 0.1.0, got $actual"
+            exit 1
+          fi
+          if [ "${{ steps.setup.outputs.version }}" != "0.1.0" ]; then
+            echo "::error::expected output version 0.1.0, got ${{ steps.setup.outputs.version }}"
+            exit 1
+          fi

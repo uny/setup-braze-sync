@@ -47,7 +47,10 @@ runs:
       run: |
         set -euo pipefail
         if [ "$INPUT_VERSION" = "latest" ]; then
-          tag=$(gh release view --repo uny/braze-sync --json tagName --jq '.tagName')
+          if ! tag=$(gh release view --repo uny/braze-sync --json tagName --jq '.tagName' 2>&1); then
+            echo "::error::Failed to query latest braze-sync release from uny/braze-sync: $tag"
+            exit 1
+          fi
         else
           tag="v${INPUT_VERSION#v}"
         fi
@@ -76,7 +79,10 @@ runs:
         gh release download "$TAG" \
           --repo uny/braze-sync \
           --pattern "$archive" \
+          --pattern "${archive}.sha256" \
           --dir "$install_dir"
+
+        ( cd "$install_dir" && shasum -a 256 --check "${archive}.sha256" )
 
         if [ "$EXT" = "tar.gz" ]; then
           tar xzf "${install_dir}/${archive}" -C "$install_dir"
