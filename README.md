@@ -16,9 +16,8 @@ steps:
       BRAZE_DEV_API_KEY: ${{ secrets.BRAZE_DEV_API_KEY }}
 ```
 
-The default `GITHUB_TOKEN` needs `contents: read` to download release assets
-from `uny/braze-sync` (granted by default unless your workflow restricts
-permissions).
+The default `GITHUB_TOKEN` is sufficient: release assets are pulled from the
+public `uny/braze-sync` repository, so no extra token scopes are required.
 
 ### Pin to a specific version
 

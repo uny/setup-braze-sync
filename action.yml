@@ -17,7 +17,7 @@ inputs:
 outputs:
   version:
     description: "The version of braze-sync that was installed"
-    value: ${{ steps.install.outputs.version }}
+    value: ${{ steps.resolve.outputs.version }}
 
 runs:
   using: "composite"
@@ -46,7 +46,7 @@ runs:
         INPUT_VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
-        if [ "$INPUT_VERSION" = "latest" ]; then
+        if [ -z "${INPUT_VERSION:-}" ] || [ "$INPUT_VERSION" = "latest" ]; then
           if ! tag=$(gh release view --repo uny/braze-sync --json tagName --jq '.tagName' 2>&1); then
             echo "::error::Failed to query latest braze-sync release from uny/braze-sync: $tag"
             exit 1
@@ -80,7 +80,8 @@ runs:
           --repo uny/braze-sync \
           --pattern "$archive" \
           --pattern "${archive}.sha256" \
-          --dir "$install_dir"
+          --dir "$install_dir" \
+          --clobber
 
         expected=$(awk '{print $1}' "${install_dir}/${archive}.sha256")
         if [ -z "$expected" ]; then
@@ -112,5 +113,4 @@ runs:
         fi
 
         echo "${install_dir}" >> "$GITHUB_PATH"
-        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
         echo "::notice::Installed braze-sync v${VERSION} for ${TARGET}"
