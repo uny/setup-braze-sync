@@ -82,7 +82,23 @@ runs:
           --pattern "${archive}.sha256" \
           --dir "$install_dir"
 
-        ( cd "$install_dir" && shasum -a 256 --check "${archive}.sha256" )
+        expected=$(awk '{print $1}' "${install_dir}/${archive}.sha256")
+        if [ -z "$expected" ]; then
+          echo "::error::Empty or malformed checksum file ${archive}.sha256"
+          exit 1
+        fi
+        if command -v sha256sum >/dev/null 2>&1; then
+          actual=$(sha256sum "${install_dir}/${archive}" | awk '{print $1}')
+        elif command -v shasum >/dev/null 2>&1; then
+          actual=$(shasum -a 256 "${install_dir}/${archive}" | awk '{print $1}')
+        else
+          echo "::error::Neither sha256sum nor shasum is available to verify checksum"
+          exit 1
+        fi
+        if [ "$expected" != "$actual" ]; then
+          echo "::error::SHA256 mismatch for ${archive}: expected ${expected}, got ${actual}"
+          exit 1
+        fi
 
         if [ "$EXT" = "tar.gz" ]; then
           tar xzf "${install_dir}/${archive}" -C "$install_dir"

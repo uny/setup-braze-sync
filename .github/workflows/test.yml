@@ -27,33 +27,50 @@ jobs:
         id: setup
       - name: Verify installation
         shell: bash
+        env:
+          OUTPUT_VERSION: ${{ steps.setup.outputs.version }}
         run: |
           set -euo pipefail
           braze-sync --version
-          if [ -z "${{ steps.setup.outputs.version }}" ]; then
+          if [ -z "$OUTPUT_VERSION" ]; then
             echo "::error::version output was empty"
+            exit 1
+          fi
+          cli=$(braze-sync --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+          if [ -z "$cli" ]; then
+            echo "::error::could not parse version from braze-sync --version"
+            exit 1
+          fi
+          if [ "$cli" != "$OUTPUT_VERSION" ]; then
+            echo "::error::CLI version ($cli) does not match action output ($OUTPUT_VERSION)"
             exit 1
           fi
 
   test-pinned:
-    name: Install pinned version
+    name: Install pinned version (${{ matrix.version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["0.1.0", "v0.1.0"]
     steps:
       - uses: actions/checkout@v4
       - uses: ./
         id: setup
         with:
-          version: "0.1.0"
+          version: ${{ matrix.version }}
       - name: Verify pinned version
         shell: bash
+        env:
+          OUTPUT_VERSION: ${{ steps.setup.outputs.version }}
         run: |
           set -euo pipefail
-          actual=$(braze-sync --version | awk '{print $2}')
+          actual=$(braze-sync --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
           if [ "$actual" != "0.1.0" ]; then
             echo "::error::expected braze-sync 0.1.0, got $actual"
             exit 1
           fi
-          if [ "${{ steps.setup.outputs.version }}" != "0.1.0" ]; then
-            echo "::error::expected output version 0.1.0, got ${{ steps.setup.outputs.version }}"
+          if [ "$OUTPUT_VERSION" != "0.1.0" ]; then
+            echo "::error::expected output version 0.1.0, got $OUTPUT_VERSION"
             exit 1
           fi
