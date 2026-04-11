@@ -1,0 +1,116 @@
+name: "Setup braze-sync"
+description: "Install braze-sync CLI for managing Braze configuration as code"
+branding:
+  icon: "upload-cloud"
+  color: "blue"
+
+inputs:
+  version:
+    description: "Version to install (e.g. '0.1.0'). Defaults to latest."
+    required: false
+    default: "latest"
+  token:
+    description: "GitHub token for downloading release assets. Defaults to GITHUB_TOKEN."
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  version:
+    description: "The version of braze-sync that was installed"
+    value: ${{ steps.resolve.outputs.version }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Determine platform
+      id: platform
+      shell: bash
+      run: |
+        set -euo pipefail
+        case "$RUNNER_OS-$RUNNER_ARCH" in
+          Linux-X64)    target="x86_64-unknown-linux-gnu"  ; ext="tar.gz" ;;
+          Linux-ARM64)  target="aarch64-unknown-linux-gnu" ; ext="tar.gz" ;;
+          macOS-X64)    target="x86_64-apple-darwin"       ; ext="tar.gz" ;;
+          macOS-ARM64)  target="aarch64-apple-darwin"      ; ext="tar.gz" ;;
+          Windows-X64)  target="x86_64-pc-windows-msvc"    ; ext="zip"    ;;
+          *) echo "::error::Unsupported platform: $RUNNER_OS-$RUNNER_ARCH" && exit 1 ;;
+        esac
+        echo "target=$target" >> "$GITHUB_OUTPUT"
+        echo "ext=$ext" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve version
+      id: resolve
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        if [ -z "${INPUT_VERSION:-}" ] || [ "$INPUT_VERSION" = "latest" ]; then
+          if ! tag=$(gh release view --repo uny/braze-sync --json tagName --jq '.tagName' 2>&1); then
+            echo "::error::Failed to query latest braze-sync release from uny/braze-sync: $tag"
+            exit 1
+          fi
+        else
+          tag="v${INPUT_VERSION#v}"
+        fi
+        if [ -z "$tag" ]; then
+          echo "::error::Failed to resolve braze-sync version"
+          exit 1
+        fi
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+        echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+    - name: Install braze-sync
+      id: install
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        TAG: ${{ steps.resolve.outputs.tag }}
+        VERSION: ${{ steps.resolve.outputs.version }}
+        TARGET: ${{ steps.platform.outputs.target }}
+        EXT: ${{ steps.platform.outputs.ext }}
+      run: |
+        set -euo pipefail
+        archive="braze-sync-${TARGET}.${EXT}"
+        install_dir="${RUNNER_TEMP}/braze-sync"
+        mkdir -p "$install_dir"
+
+        gh release download "$TAG" \
+          --repo uny/braze-sync \
+          --pattern "$archive" \
+          --pattern "${archive}.sha256" \
+          --dir "$install_dir" \
+          --clobber
+
+        expected=$(awk '{print $1}' "${install_dir}/${archive}.sha256")
+        if [ -z "$expected" ]; then
+          echo "::error::Empty or malformed checksum file ${archive}.sha256"
+          exit 1
+        fi
+        # Hash the basename from inside install_dir: on Windows, RUNNER_TEMP
+        # contains backslashes, and GNU coreutils sha256sum escapes such paths
+        # by prefixing the output line with '\', which breaks direct comparison.
+        pushd "$install_dir" >/dev/null
+        if command -v sha256sum >/dev/null 2>&1; then
+          actual=$(sha256sum "$archive" | awk '{print $1}')
+        elif command -v shasum >/dev/null 2>&1; then
+          actual=$(shasum -a 256 "$archive" | awk '{print $1}')
+        else
+          echo "::error::Neither sha256sum nor shasum is available to verify checksum"
+          exit 1
+        fi
+        popd >/dev/null
+        if [ "$expected" != "$actual" ]; then
+          echo "::error::SHA256 mismatch for ${archive}: expected ${expected}, got ${actual}"
+          exit 1
+        fi
+
+        if [ "$EXT" = "tar.gz" ]; then
+          tar xzf "${install_dir}/${archive}" -C "$install_dir"
+        else
+          unzip -o "${install_dir}/${archive}" -d "$install_dir"
+        fi
+
+        echo "${install_dir}" >> "$GITHUB_PATH"
+        echo "::notice::Installed braze-sync v${VERSION} for ${TARGET}"

@@ -1,0 +1,75 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-latest:
+    name: Install latest on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        id: setup
+      - name: Verify installation
+        shell: bash
+        env:
+          OUTPUT_VERSION: ${{ steps.setup.outputs.version }}
+        run: |
+          set -euo pipefail
+          braze-sync --version
+          if [ -z "$OUTPUT_VERSION" ]; then
+            echo "::error::version output was empty"
+            exit 1
+          fi
+          cli=$(braze-sync --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+          if [ -z "$cli" ]; then
+            echo "::error::could not parse version from braze-sync --version"
+            exit 1
+          fi
+          if [ "$cli" != "$OUTPUT_VERSION" ]; then
+            echo "::error::CLI version ($cli) does not match action output ($OUTPUT_VERSION)"
+            exit 1
+          fi
+
+  test-pinned:
+    name: Install pinned version (${{ matrix.version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["0.1.0", "v0.1.0"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        id: setup
+        with:
+          version: ${{ matrix.version }}
+      - name: Verify pinned version
+        shell: bash
+        env:
+          OUTPUT_VERSION: ${{ steps.setup.outputs.version }}
+        run: |
+          set -euo pipefail
+          actual=$(braze-sync --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+          if [ "$actual" != "0.1.0" ]; then
+            echo "::error::expected braze-sync 0.1.0, got $actual"
+            exit 1
+          fi
+          if [ "$OUTPUT_VERSION" != "0.1.0" ]; then
+            echo "::error::expected output version 0.1.0, got $OUTPUT_VERSION"
+            exit 1
+          fi
