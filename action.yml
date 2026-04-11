@@ -26,12 +26,13 @@ runs:
       id: platform
       shell: bash
       run: |
+        set -euo pipefail
         case "$RUNNER_OS-$RUNNER_ARCH" in
-          Linux-X64)   target="x86_64-unknown-linux-gnu" ; ext="tar.gz" ;;
+          Linux-X64)    target="x86_64-unknown-linux-gnu"  ; ext="tar.gz" ;;
           Linux-ARM64)  target="aarch64-unknown-linux-gnu" ; ext="tar.gz" ;;
-          macOS-X64)   target="x86_64-apple-darwin" ; ext="tar.gz" ;;
-          macOS-ARM64)  target="aarch64-apple-darwin" ; ext="tar.gz" ;;
-          Windows-X64) target="x86_64-pc-windows-msvc" ; ext="zip" ;;
+          macOS-X64)    target="x86_64-apple-darwin"       ; ext="tar.gz" ;;
+          macOS-ARM64)  target="aarch64-apple-darwin"      ; ext="tar.gz" ;;
+          Windows-X64)  target="x86_64-pc-windows-msvc"    ; ext="zip"    ;;
           *) echo "::error::Unsupported platform: $RUNNER_OS-$RUNNER_ARCH" && exit 1 ;;
         esac
         echo "target=$target" >> "$GITHUB_OUTPUT"
@@ -44,39 +45,45 @@ runs:
         GH_TOKEN: ${{ inputs.token }}
         INPUT_VERSION: ${{ inputs.version }}
       run: |
+        set -euo pipefail
         if [ "$INPUT_VERSION" = "latest" ]; then
-          version=$(gh release view --repo uny/braze-sync --json tagName --jq '.tagName | ltrimstr("v")')
+          tag=$(gh release view --repo uny/braze-sync --json tagName --jq '.tagName')
         else
-          version="$INPUT_VERSION"
+          tag="v${INPUT_VERSION#v}"
         fi
-        echo "version=$version" >> "$GITHUB_OUTPUT"
+        if [ -z "$tag" ]; then
+          echo "::error::Failed to resolve braze-sync version"
+          exit 1
+        fi
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+        echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
     - name: Install braze-sync
       id: install
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
+        TAG: ${{ steps.resolve.outputs.tag }}
+        VERSION: ${{ steps.resolve.outputs.version }}
+        TARGET: ${{ steps.platform.outputs.target }}
+        EXT: ${{ steps.platform.outputs.ext }}
       run: |
-        version="${{ steps.resolve.outputs.version }}"
-        target="${{ steps.platform.outputs.target }}"
-        ext="${{ steps.platform.outputs.ext }}"
-        archive="braze-sync-${target}.${ext}"
-
+        set -euo pipefail
+        archive="braze-sync-${TARGET}.${EXT}"
         install_dir="${RUNNER_TEMP}/braze-sync"
         mkdir -p "$install_dir"
 
-        gh release download "v${version}" \
+        gh release download "$TAG" \
           --repo uny/braze-sync \
           --pattern "$archive" \
           --dir "$install_dir"
 
-        if [ "$ext" = "tar.gz" ]; then
+        if [ "$EXT" = "tar.gz" ]; then
           tar xzf "${install_dir}/${archive}" -C "$install_dir"
         else
           unzip -o "${install_dir}/${archive}" -d "$install_dir"
         fi
 
-        rm -f "${install_dir}/${archive}"
         echo "${install_dir}" >> "$GITHUB_PATH"
-        echo "version=${version}" >> "$GITHUB_OUTPUT"
-        echo "::notice::Installed braze-sync v${version} for ${target}"
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+        echo "::notice::Installed braze-sync v${VERSION} for ${TARGET}"
