@@ -87,14 +87,19 @@ runs:
           echo "::error::Empty or malformed checksum file ${archive}.sha256"
           exit 1
         fi
+        # Hash the basename from inside install_dir: on Windows, RUNNER_TEMP
+        # contains backslashes, and GNU coreutils sha256sum escapes such paths
+        # by prefixing the output line with '\', which breaks direct comparison.
+        pushd "$install_dir" >/dev/null
         if command -v sha256sum >/dev/null 2>&1; then
-          actual=$(sha256sum "${install_dir}/${archive}" | awk '{print $1}')
+          actual=$(sha256sum "$archive" | awk '{print $1}')
         elif command -v shasum >/dev/null 2>&1; then
-          actual=$(shasum -a 256 "${install_dir}/${archive}" | awk '{print $1}')
+          actual=$(shasum -a 256 "$archive" | awk '{print $1}')
         else
           echo "::error::Neither sha256sum nor shasum is available to verify checksum"
           exit 1
         fi
+        popd >/dev/null
         if [ "$expected" != "$actual" ]; then
           echo "::error::SHA256 mismatch for ${archive}: expected ${expected}, got ${actual}"
           exit 1
