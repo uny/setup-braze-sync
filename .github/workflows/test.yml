@@ -51,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["0.1.0", "v0.1.0"]
+        version: ["0.7.0", "v0.7.0"]
     steps:
       - uses: actions/checkout@v4
       - uses: ./
@@ -65,11 +65,11 @@ jobs:
         run: |
           set -euo pipefail
           actual=$(braze-sync --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
-          if [ "$actual" != "0.1.0" ]; then
-            echo "::error::expected braze-sync 0.1.0, got $actual"
+          if [ "$actual" != "0.7.0" ]; then
+            echo "::error::expected braze-sync 0.7.0, got $actual"
             exit 1
           fi
-          if [ "$OUTPUT_VERSION" != "0.1.0" ]; then
-            echo "::error::expected output version 0.1.0, got $OUTPUT_VERSION"
+          if [ "$OUTPUT_VERSION" != "0.7.0" ]; then
+            echo "::error::expected output version 0.7.0, got $OUTPUT_VERSION"
             exit 1
           fi
